@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale: 1.0">
+    <title>ASCII</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: monospace;
+            margin: 0;
+            padding: 0;
+            background-color: white;
+            color: black;
+            overflow-x: hidden;
+        }
+
+        #media-container,
+        #ascii-container {
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+        }
+
+        #video,
+        #image {
+            max-width: 100%;
+            max-height: 80vh;
+            height: auto;
+        }
+
+        #ascii {
+            padding: 10px;
+            white-space: pre;
+            line-height: 0.9;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-size: 8px;
+            background-color: white;
+            color: black;
+            width: 100%;
+        }
+
+        #toggle-char-buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            visibility: visible;
+        }
+
+        .toggle-char-checkbox {
+            margin: 5px;
+            padding: 5px;
+            color: #333;
+            background-color: #f3f3f3;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        #change-bg-ascii-btn {
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            z-index: 1000;
+            margin-top: 10px;
+            display: none;
+        }
+
+        #change-bg-ascii-btn:hover {
+            background-color: #45a049;
+        }
+
+        .row {
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            #ascii {
+                font-size: 6px;
+                height: 40vh;
+            }
+
+            #video,
+            #image {
+                max-width: 100%;
+                height: auto;
+            }
+
+            #toggle-char-buttons {
+                font-size: 10px;
+            }
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .file-input-wrapper .btn-file {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            top: 0;
+            right: 0;
+            min-width: 100%;
+            min-height: 100%;
+            font-size: 100px;
+            text-align: right;
+            filter: alpha(opacity=0);
+            opacity: 0;
+            outline: none;
+            background: white;
+            cursor: inherit;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid">
+        <div class="row justify-content-center">
+            <div class="file-input-wrapper">
+                <button class="btn btn-primary btn-file">Pilih File (gif,jpg,png,mp4)
+                    <input type="file" id="file-input" accept="video/mp4, image/gif, image/jpeg, image/png, video/webm">
+                </button>
+            </div>
+            <button id="load-bad-apple-btn" class="btn btn-secondary">Lihat contoh</button>
+        </div>
+
+
+        <div class="row">
+            <div id="media-container" class="col-12">
+            </div>
+        </div>
+        <div class="row justify-content-center">
+            <button id="convert-btn" style="display: none;" class="btn btn-success my-3">ubah ke
+                ASCII</button>
+        </div>
+        <center>
+        <div class="row">
+            <div id="ascii-container" class="col-12">
+                <pre id="ascii"></pre>
+            </div>
+        </div>
+        </center>
+
+
+        <div class="row justify-content-center">
+            <button id="change-bg-ascii-btn" class="btn btn-info">ASCII hitam/putih</button>
+            <div id="toggle-char-buttons" class="my-3"></div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const convertBtn = document.getElementById('convert-btn');
+        const mediaContainer = document.getElementById('media-container');
+        const asciiContainer = document.getElementById('ascii');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const changeBgAsciiBtn = document.getElementById('change-bg-ascii-btn');
+        const toggleCharButtons = document.getElementById('toggle-char-buttons');
+        const loadBadAppleBtn = document.getElementById('load-bad-apple-btn');
+
+        let asciiChars = ['6', '#', '8', '&', '%', '$', '?', '*', '+', ';', ':', ',', '.'];
+        let hiddenChars = new Set();
+        let video = null;
+        let image = null;
+        let gif = null;
+        let gifIndex = 0;
+        let gifInterval = null;
+        let currentMediaType = null;
+
+        ctx.willReadFrequently = true;
+
+        function pixelToAscii(pixelValue) {
+            const gray = Math.floor((pixelValue.r + pixelValue.g + pixelValue.b) / 3);
+            const asciiIndex = Math.floor((gray / 255) * (asciiChars.length - 1));
+            let char = asciiChars[asciiIndex];
+            return hiddenChars.has(char) ? ' ' : char;
+        }
+
+        function renderVideoFrame() {
+            if (!video) return;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            let asciiArt = '';
+
+            for (let y = 0; y < canvas.height; y += 6) {
+                let line = '';
+                for (let x = 0; x < canvas.width; x += 3) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const pixel = {
+                        r: data[idx],
+                        g: data[idx + 1],
+                        b: data[idx + 2],
+                        a: data[idx + 3]
+                    };
+                    line += pixelToAscii(pixel);
+                }
+                asciiArt += line + '\n';
+            }
+
+            asciiContainer.textContent = asciiArt;
+            changeBgAsciiBtn.style.display = 'inline-block';
+            requestAnimationFrame(renderVideoFrame);
+        }
+
+        function renderImageToAscii() {
+            if (!image) return;
+
+            const img = image;
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            ctx.drawImage(img, 0, 0, img.width, img.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            let asciiArt = '';
+
+            for (let y = 0; y < canvas.height; y += 6) {
+                let line = '';
+                for (let x = 0; x < canvas.width; x += 3) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const pixel = {
+                        r: data[idx],
+                        g: data[idx + 1],
+                        b: data[idx + 2],
+                        a: data[idx + 3]
+                    };
+                    line += pixelToAscii(pixel);
+                }
+                asciiArt += line + '\n';
+            }
+
+            asciiContainer.textContent = asciiArt;
+            changeBgAsciiBtn.style.display = 'inline-block';
+        }
+
+        function renderGifToAscii() {
+            if (!gif || gif.length === 0) {
+                clearInterval(gifInterval);
+                return;
+            }
+
+            const img = gif[gifIndex];
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            let asciiArt = '';
+
+            for (let y = 0; y < canvas.height; y += 6) {
+                let line = '';
+                for (let x = 0; x < canvas.width; x += 3) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const pixel = {
+                        r: data[idx],
+                        g: data[idx + 1],
+                        b: data[idx + 2],
+                        a: data[idx + 3]
+                    };
+                    line += pixelToAscii(pixel);
+                }
+                asciiArt += line + '\n';
+            }
+
+            asciiContainer.textContent = asciiArt;
+            changeBgAsciiBtn.style.display = 'inline-block';
+            gifIndex = (gifIndex + 1) % gif.length;
+        }
+
+        function createToggleCheckboxes() {
+            toggleCharButtons.innerHTML = '';
+            asciiChars.forEach((char) => {
+                const label = document.createElement('label');
+                label.classList.add('toggle-char-checkbox');
+                label.style.display = 'inline-block';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `toggle-char-${char}`;
+                checkbox.checked = !hiddenChars.has(char);
+
+                checkbox.addEventListener('change', function() {
+
+                    if (checkbox.checked) {
+                        hiddenChars.delete(char);
+                    } else {
+                        hiddenChars.add(char);
+                    }
+
+                    if (currentMediaType === 'video' && video) {
+                        renderVideoFrame();
+                    } else if (currentMediaType === 'image' && image) {
+                        renderImageToAscii();
+                    } else if (currentMediaType === 'gif' && gif && gif.length > 0) {
+                        renderGifToAscii();
+                    }
+                });
+
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(` ${char}`));
+                toggleCharButtons.appendChild(label);
+            });
+        }
+
+        function loadVideo(url) {
+            mediaContainer.innerHTML = '';
+            asciiContainer.textContent = '';
+            clearInterval(gifInterval);
+            currentMediaType = null;
+            video = null;
+            image = null;
+            gif = null;
+            gifIndex = 0;
+            changeBgAsciiBtn.style.display = 'none';
+            toggleCharButtons.style.visibility = 'hidden';
+
+            currentMediaType = 'video';
+            video = document.createElement('video');
+            video.src = url;
+            video.controls = true;
+            video.loop = true;
+            mediaContainer.appendChild(video);
+            convertBtn.style.display = 'inline-block';
+
+            video.addEventListener('loadedmetadata', function() {
+                video.width = Math.min(video.videoWidth, mediaContainer.offsetWidth);
+                video.height = video.videoHeight * (video.width / video.videoWidth);
+            });
+
+            video.addEventListener('canplay', function() {
+                convertBtn.onclick = function() {
+                    if (video.readyState >= 2) {
+                        video.play();
+                        renderVideoFrame();
+                    } else {
+                        console.error("Video not ready to play.");
+                    }
+                }
+                convertBtn.disabled = false;
+                convertBtn.click();
+            });
+
+            video.onerror = function(error) {
+                console.error("Error loading video:", error);
+                mediaContainer.textContent = "Error loading video.";
+                convertBtn.disabled = true;
+            };
+            createToggleCheckboxes();
+            toggleCharButtons.style.visibility = 'visible';
+
+            loadBadAppleBtn.style.display = 'none'; // Hide the button after loading
+        }
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            mediaContainer.innerHTML = '';
+            asciiContainer.textContent = '';
+            clearInterval(gifInterval);
+            currentMediaType = null;
+            video = null;
+            image = null;
+            gif = null;
+            gifIndex = 0;
+
+            changeBgAsciiBtn.style.display = 'none';
+            loadBadAppleBtn.style.display = 'inline-block';
+
+            if (file) {
+                const fileType = file.type;
+                const objectURL = URL.createObjectURL(file);
+
+                if (fileType.startsWith('video/')) {
+                    currentMediaType = 'video';
+                    video = document.createElement('video');
+                    video.src = objectURL;
+                    video.controls = true;
+                    video.loop = true;
+                    mediaContainer.appendChild(video);
+                    convertBtn.style.display = 'inline-block';
+
+                    video.addEventListener('loadedmetadata', function() {
+                        video.width = Math.min(video.videoWidth, mediaContainer.offsetWidth);
+                        video.height = video.videoHeight * (video.width / video.videoWidth);
+                    });
+
+                    video.addEventListener('canplay', function() {
+                        convertBtn.onclick = function() {
+                            if (video.readyState >= 2) {
+                                video.play();
+                                renderVideoFrame();
+                            } else {
+                                console.error("Video not ready to play.");
+                            }
+                        }
+                        convertBtn.disabled = false;
+                    });
+
+                    video.onerror = function(error) {
+                        console.error("Error loading video:", error);
+                        mediaContainer.textContent = "Error loading video.";
+                        convertBtn.disabled = true;
+                    };
+                } else if (fileType.startsWith('image/gif')) {
+                    currentMediaType = 'gif';
+                    gif = [];
+                    gifIndex = 0;
+                    const img = new Image();
+                    img.src = objectURL;
+                    img.onload = function() {
+                        gif.push(img);
+                        mediaContainer.appendChild(img);
+                        convertBtn.style.display = 'inline-block';
+                        convertBtn.disabled = false;
+
+                        convertBtn.onclick = function() {
+                            gifInterval = setInterval(function() {
+                                renderGifToAscii();
+                                gifIndex = (gifIndex + 1) % gif.length;
+
+                            }, 100);
+                        };
+                    };
+                    img.onerror = function(error) {
+                        console.error("Error loading GIF:", error);
+                        mediaContainer.textContent = "Error loading GIF.";
+                        convertBtn.disabled = true;
+                    };
+                } else if (fileType.startsWith('image/')) {
+                    currentMediaType = 'image';
+                    image = new Image();
+                    image.src = objectURL;
+                    image.onload = function() {
+                        mediaContainer.appendChild(image);
+                        convertBtn.style.display = 'inline-block';
+                        convertBtn.disabled = false;
+                        convertBtn.onclick = function() {
+                            renderImageToAscii();
+                        };
+
+                        image.width = Math.min(image.width, mediaContainer.offsetWidth);
+                        image.height = image.height * (image.width / image.width);
+
+                    };
+
+                    image.onerror = function(error) {
+                        console.error("Error loading image:", error);
+                        mediaContainer.textContent = "Error loading image.";
+                        convertBtn.disabled = true;
+                    };
+                } else {
+                    mediaContainer.textContent = "Unsupported file type.";
+                    convertBtn.style.display = 'none';
+                }
+
+                createToggleCheckboxes();
+                toggleCharButtons.style.visibility = 'visible';
+            } else {
+                mediaContainer.textContent = "No file selected.";
+                convertBtn.style.display = 'none';
+                toggleCharButtons.style.visibility = 'hidden';
+                changeBgAsciiBtn.style.display = 'none';
+            }
+        });
+
+        changeBgAsciiBtn.addEventListener('click', function() {
+            if (asciiContainer.style.backgroundColor === 'white') {
+                asciiContainer.style.backgroundColor = 'black';
+                asciiContainer.style.color = 'white';
+            } else {
+                asciiContainer.style.backgroundColor = 'white';
+                asciiContainer.style.color = 'black';
+            }
+        });
+
+        loadBadAppleBtn.addEventListener('click', function() {
+            loadVideo('bad_apple.mp4');
+        });
+    </script>
+</body>
+
+</html>
